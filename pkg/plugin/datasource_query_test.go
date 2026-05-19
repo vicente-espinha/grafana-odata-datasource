@@ -94,24 +94,24 @@ func TestQuery(t *testing.T) {
 				),
 			),
 			expected: aDataResponse(withBaseFrame("defaultTestFrame",
+				withTimeField("time", true),
 				withField("int32", []*int32{}),
 				withField("boolean", []*bool{}),
 				withField("string", []*string{}),
-				withTimeField("time", false),
 				withRow(
+					withRowValue(time.Date(2022, 1, 2, 0, 0, 0, 0, time.UTC)),
 					withRowValue(int32(10)),
 					withRowValue(false),
 					withRowValue("Hello"),
-					withRowValue(time.Date(2022, 1, 2, 0, 0, 0, 0, time.UTC)),
 				),
 				withRow(
-					nil, nil, nil,
 					withRowValue(time.Date(2000, 1, 2, 0, 0, 0, 0, time.UTC)),
+					nil, nil, nil,
 				),
 				withRow(
+					withRowValue(time.Date(2010, 1, 2, 0, 0, 0, 0, time.UTC)),
 					nil, nil,
 					withRowValue("World"),
-					withRowValue(time.Date(2010, 1, 2, 0, 0, 0, 0, time.UTC)),
 				),
 			)),
 		},
@@ -175,10 +175,12 @@ func TestQuery(t *testing.T) {
 					withProp("otherTimePropName", "2022-01-02T00:00:00Z")),
 			),
 			expected: aDataResponse(withBaseFrame("defaultTestFrame",
+				withTimeField("time", false),
 				withField("int32", []*int32{}),
 				withField("boolean", []*bool{}),
 				withField("string", []*string{}),
 				withRow(
+					nil,
 					withRowValue(int32(10)),
 					withRowValue(false),
 					withRowValue("Hello"),
@@ -191,7 +193,7 @@ func TestQuery(t *testing.T) {
 				withFilterConditions(int32Eq5, withFilterCondition(stringProp, "eq", "Hello")),
 				withProperties(int32Prop, booleanProp, stringProp))),
 			mockODataResponse: anOdataResponse(),
-			expected:          aDataResponse(withErrorResponse(errors.New("odata get failed: something went wrong"))),
+			expected:          aDataResponse(withErrorResponse(errors.New("something went wrong"))),
 		},
 	}
 
@@ -202,14 +204,9 @@ func TestQuery(t *testing.T) {
 			ds := ODataSource{&im}
 
 			body, _ := json.Marshal(table.mockODataResponse)
-			// For failure case, use raw error in mock so it gets wrapped by the actual code
-			mockErr := table.expected.Error
-			if mockErr != nil && mockErr.Error() == "odata get failed: something went wrong" {
-				mockErr = errors.New("something went wrong")
-			}
 			client := clientMock{
 				body:       body,
-				err:        mockErr,
+				err:        table.expected.Error,
 				statusCode: 200,
 			}
 			is := ODataSourceInstance{&client}
@@ -219,13 +216,7 @@ func TestQuery(t *testing.T) {
 			resp := ds.query(&client, table.query)
 
 			// Assert
-			if table.expected.Error != nil {
-				assert.Error(t, resp.Error)
-				assert.Equal(t, table.expected.Error.Error(), resp.Error.Error())
-				assert.Equal(t, table.expected.Frames, resp.Frames)
-			} else {
-				assert.Equal(t, table.expected, resp)
-			}
+			assert.Equal(t, table.expected, resp)
 		})
 	}
 }

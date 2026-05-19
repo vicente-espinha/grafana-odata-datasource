@@ -147,12 +147,13 @@ func withErrorResponse(err error) func(n *backend.DataResponse) {
 func withDefaultTestFrame(builders ...func(*data.Frame)) func(n *backend.DataResponse) {
 	return func(dataResponse *backend.DataResponse) {
 		var frame = aDataFrame("defaultTestFrame", builders...)
+		timeLabel, _ := data.LabelsFromString("time=time")
 		frame.Fields = append(
 			frame.Fields,
+			data.NewField("time", timeLabel, []*time.Time{}),
 			data.NewField("int32", nil, []*int32{}),
 			data.NewField("boolean", nil, []*bool{}),
 			data.NewField("string", nil, []*string{}),
-			data.NewField("time", nil, []*time.Time{}),
 		)
 		dataResponse.Frames = append(dataResponse.Frames, frame)
 		values := make([]interface{}, 4)
@@ -160,10 +161,10 @@ func withDefaultTestFrame(builders ...func(*data.Frame)) func(n *backend.DataRes
 		valueInt := int32(5)
 		valueBool := true
 		valueString := "Hello World!"
-		values[0] = &valueInt
-		values[1] = &valueBool
-		values[2] = &valueString
-		values[3] = &valueTime
+		values[0] = &valueTime
+		values[1] = &valueInt
+		values[2] = &valueBool
+		values[3] = &valueString
 		frame.AppendRow(values...)
 	}
 }

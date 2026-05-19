@@ -132,7 +132,7 @@ func TestGetEntities(t *testing.T) {
 			client := GetOC("*", table.handlerCallback)
 
 			// Act
-			resp, err := client.Get("", "Temperatures", []property{aProperty(int32Prop)}, someFilterConditions(int32Eq5), false)
+			resp, err := client.Get("Temperatures", []property{aProperty(int32Prop)}, someFilterConditions(int32Eq5))
 
 			// Assert
 			if table.expectedError == nil {

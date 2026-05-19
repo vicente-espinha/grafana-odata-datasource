@@ -37,9 +37,13 @@ func (client *clientMock) GetMetadata() (*http.Response, error) {
 		Body: io.NopCloser(bytes.NewReader(client.body))}, client.err
 }
 
-func (client *clientMock) Get(_ string, _ []property, _ []filterCondition) (*http.Response, error) {
+func (client *clientMock) Get(_ string, _ string, _ []property, _ []filterCondition, _ bool) (*http.Response, error) {
 	return &http.Response{StatusCode: client.statusCode,
 		Body: io.NopCloser(bytes.NewReader(client.body))}, client.err
+}
+
+func (client *clientMock) SetCookieHeader(header string) {
+	// Mock implementation - no-op for tests
 }
 
 func (im *managerMock) Get(ctx context.Context, pluginContext backend.PluginContext) (instancemgmt.Instance, error) {

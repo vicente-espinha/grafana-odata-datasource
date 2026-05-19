@@ -83,16 +83,11 @@ func (ds *ODataSource) QueryData(ctx context.Context, req *backend.QueryDataRequ
 	rawInstance, _ := ds.im.Get(ctx, req.PluginContext)
 	dsInstance := rawInstance.(*ODataSourceInstance)
 
-	clientImpl, ok := dsInstance.client.(*ODataClientImpl)
-	if !ok {
-		return nil, fmt.Errorf("expected *ODataClientImpl, got something else")
-	}
-
 	cookieHeaders, ok := req.Headers["Cookie"]
 	if !ok || len(cookieHeaders) == 0 {
-		clientImpl.SetCookieHeader("")
+		dsInstance.client.SetCookieHeader("")
 	} else {
-		clientImpl.SetCookieHeader(cookieHeaders)
+		dsInstance.client.SetCookieHeader(cookieHeaders)
 	}
 	
 	clientInstance := ds.getClientInstance(ctx, req.PluginContext)
@@ -133,17 +128,12 @@ func (ds *ODataSource) CallResource(ctx context.Context, req *backend.CallResour
 	rawInstance, _ := ds.im.Get(ctx, req.PluginContext)
 	dsInstance := rawInstance.(*ODataSourceInstance)
 
-	clientImpl, ok := dsInstance.client.(*ODataClientImpl)
-	if !ok {
-		return fmt.Errorf("expected *ODataClientImpl, got something else")
-	}
-
 	cookieHeaders, ok := req.Headers["Cookie"]
 	if !ok || len(cookieHeaders) == 0 {
-		clientImpl.SetCookieHeader("")
+		dsInstance.client.SetCookieHeader("")
 	} else {
 		combined := strings.Join(cookieHeaders, "; ")
-		clientImpl.SetCookieHeader(combined)
+		dsInstance.client.SetCookieHeader(combined)
 	}
 
 	switch req.Path {

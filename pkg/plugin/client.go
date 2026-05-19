@@ -124,14 +124,14 @@ func processURL(encodedURL string) (string, string) {
         queryString = parts[1]
     }
 
-    decodedQuery, err := url.QueryUnescape(queryString)
-    if err != nil {
-        fmt.Println("Error decoding query string:", err)
-        return "", ""
-    }
+    // decodedQuery, err := url.QueryUnescape(queryString)
+    // if err != nil {
+    //     fmt.Println("Error decoding query string:", err)
+    //     return "", ""
+    // }
 
     url := fmt.Sprintf("%s?$query", baseUrl)
-    body := decodedQuery
+    body := queryString
 
     return url, body
 }

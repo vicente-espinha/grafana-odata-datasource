@@ -129,6 +129,12 @@ func processURL(encodedURL string) (string, string) {
     //     fmt.Println("Error decoding query string:", err)
     //     return "", ""
     // }
+	
+    // ✅ Fix HTML encoding
+    queryString = strings.ReplaceAll(queryString, "&amp;", "&")
+
+    // ✅ Critical fix for $query: protect '&' inside values
+    queryString = strings.ReplaceAll(queryString, "%26", "%2526")
 
     url := fmt.Sprintf("%s?$query", baseUrl)
     body := queryString

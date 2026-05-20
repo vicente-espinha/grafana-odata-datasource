@@ -175,11 +175,13 @@ func (ds *ODataSource) query(clientInstance ODataClient, query backend.DataQuery
 	resp, err := clientInstance.Get(qm.ODataQueryString, qm.EntitySet.Name, props,
 		append(qm.FilterConditions, TimeRangeToFilter(query.TimeRange, qm.TimeProperty)...), qm.UsePost)
 	if err != nil {
+		log.DefaultLogger.Error("Get() failed", "error", err, "queryString", qm.ODataQueryString, "usePost", qm.UsePost)
 		return errorResponse("odata get failed", err)
 	}
 	defer resp.Body.Close()
 
-	log.DefaultLogger.Debug("request response status", "status", resp.Status)
+	log.DefaultLogger.Error("Get() response", "status", resp.Status, "statusCode", resp.StatusCode, 
+		"queryString", qm.ODataQueryString, "usePost", qm.UsePost, "entitySet", qm.EntitySet.Name)
 	if resp.StatusCode != http.StatusOK {
 		return errorResponse(fmt.Sprintf("get failed with status code %d", resp.StatusCode), nil)
 	}
@@ -188,6 +190,8 @@ func (ds *ODataSource) query(clientInstance ODataClient, query backend.DataQuery
 	if err != nil {
 		return errorResponse("reading response body failed", err)
 	}
+
+	log.DefaultLogger.Debug("Get() response body", "body", string(bodyBytes), "bodyLength", len(bodyBytes))
 
 	var result odata.Response
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {

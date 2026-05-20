@@ -117,9 +117,6 @@ func (client *ODataClientImpl) doPostRequest(urlToPost string) (*http.Response, 
 }
 
 func processURL(encodedURL string) (string, string) {
-    // ✅ FIRST: normalize HTML encoding
-    encodedURL = strings.ReplaceAll(encodedURL, "&amp;", "&")
-
     parts := strings.SplitN(encodedURL, "?", 2)
 
     baseURL := parts[0]
@@ -129,8 +126,7 @@ func processURL(encodedURL string) (string, string) {
         queryString = parts[1]
     }
 
-    // ✅ ALSO normalize inside query (double safety)
-    queryString = strings.ReplaceAll(queryString, "&amp;", "&")
+    queryString = strings.ReplaceAll(queryString, "+", "%20")
 
     queryURL := fmt.Sprintf("%s?$query", baseURL)
 

@@ -196,6 +196,9 @@ func (ds *ODataSource) query(clientInstance ODataClient, query backend.DataQuery
 	}
 
 	log.DefaultLogger.Debug("query complete", "noOfEntities", len(result.Value))
+	if len(result.Value) == 0 {
+		log.DefaultLogger.Debug("server returned empty result set", "body", string(bodyBytes))
+	}
 
 	entityProperties, err := ds.resolveProperties(clientInstance, qm, props)
 	if err != nil {

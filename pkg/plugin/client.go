@@ -119,25 +119,33 @@ func processURL(encodedURL string) (string, string) {
         queryString = parts[1]
     }
 
-    // Encode any literal '&' inside OData single-quoted string literals to %26 so
-    // the OData server doesn't misinterpret them as query-option separators.
-    // This handles both a frontend that sends 'Clone&1' (literal) and one that
-    // already sends 'Clone%261' (pre-encoded) — %26 is not touched here.
-    url := fmt.Sprintf("%s?$query", baseUrl)
-    return url, encodeAmpersandInStringLiterals(queryString)
+    // URL-decode first so that %26 becomes a literal &.
+    decoded, err := url.QueryUnescape(queryString)
+    if err != nil {
+        decoded = queryString
+    }
+
+    // Replace the '&' characters that act as query-option separators (i.e. those
+    // outside OData single-quoted string literals) with newlines. This means a
+    // literal '&' inside a string value (e.g. Material_Name eq 'Clone&1') is kept
+    // as-is and never confused with a separator by the OData server.
+    body := replaceOuterAmpersandsWithNewlines(decoded)
+
+    postURL := fmt.Sprintf("%s?$query", baseUrl)
+    return postURL, body
 }
 
-// encodeAmpersandInStringLiterals replaces literal '&' characters that appear
-// inside OData single-quoted string literals with their percent-encoded form %26.
-// Escaped single quotes ('') inside a literal are handled correctly.
-func encodeAmpersandInStringLiterals(s string) string {
+// replaceOuterAmpersandsWithNewlines replaces every '&' that appears outside of
+// OData single-quoted string literals with a newline character, leaving '&' inside
+// string literals untouched. Escaped single quotes ('') are handled correctly.
+func replaceOuterAmpersandsWithNewlines(s string) string {
     var sb strings.Builder
     inString := false
     for i := 0; i < len(s); i++ {
         c := s[i]
         switch {
         case c == '\'':
-            // OData escapes a single quote inside a string as ''
+            // OData escapes a literal single quote inside a string as ''
             if inString && i+1 < len(s) && s[i+1] == '\'' {
                 sb.WriteByte(c)
                 sb.WriteByte(s[i+1])
@@ -146,8 +154,8 @@ func encodeAmpersandInStringLiterals(s string) string {
                 inString = !inString
                 sb.WriteByte(c)
             }
-        case c == '&' && inString:
-            sb.WriteString("%26")
+        case c == '&' && !inString:
+            sb.WriteByte('\n')
         default:
             sb.WriteByte(c)
         }

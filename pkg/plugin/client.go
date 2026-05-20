@@ -56,20 +56,26 @@ func (client *ODataClientImpl) Get(oDataQueryString string, entitySet string, pr
 		}
 
 		parsedBaseUrl.Path = path.Join(parsedBaseUrl.Path, parsedQuery.Path)
-		params, _ := url.ParseQuery(parsedBaseUrl.RawQuery)
 
-		queryParams, _ := url.ParseQuery(parsedQuery.RawQuery)
-		for key, values := range queryParams {
-			for _, value := range values {
-				params.Add(key, value)
-			}
+		// Merge raw query strings without the decode/re-encode cycle that
+		// url.ParseQuery + url.Values.Encode() would apply. That cycle breaks
+		// two things when & appears in an OData value (e.g. a material name):
+		//   1. url.ParseQuery splits on a literal & inside a value, truncating $filter.
+		//   2. url.Values.Encode re-encodes $ in OData parameter names to %24
+		//      (e.g. $filter → %24filter), which many OData servers reject.
+		// By merging the raw query strings we preserve the caller's encoding,
+		// including %26 for & in values and $ in OData parameter names.
+		rawQuery := parsedQuery.RawQuery
+		if parsedBaseUrl.RawQuery != "" {
+			rawQuery = parsedBaseUrl.RawQuery + "&" + rawQuery
 		}
-
-		encodedUrl := params.Encode()
+		// Encode any literal spaces present in the OData expression.
+		spaceEncoding := "+"
 		if client.urlSpaceEncoding == "%20" {
-			encodedUrl = strings.ReplaceAll(encodedUrl, "+", "%20")
+			spaceEncoding = "%20"
 		}
-		parsedBaseUrl.RawQuery = encodedUrl
+		rawQuery = strings.ReplaceAll(rawQuery, " ", spaceEncoding)
+		parsedBaseUrl.RawQuery = rawQuery
 
 		requestUrl = parsedBaseUrl.String()
 		log.DefaultLogger.Debug("Using provided OData query string: " + requestUrl)

@@ -119,16 +119,12 @@ func processURL(encodedURL string) (string, string) {
         queryString = parts[1]
     }
 
-    decodedQuery, err := url.QueryUnescape(queryString)
-    if err != nil {
-        fmt.Println("Error decoding query string:", err)
-        return "", ""
-    }
-
+    // Do NOT unescape the query string: the body must be sent as a raw URL-encoded
+    // OData query so that percent-encoded characters (e.g. %26 for a literal '&'
+    // inside a string literal) are preserved. Unescaping would turn %26 into '&',
+    // which the OData server then misinterprets as a query-option separator.
     url := fmt.Sprintf("%s?$query", baseUrl)
-    body := decodedQuery
-
-    return url, body
+    return url, queryString
 }
 
 func buildQueryUrl(baseUrl string, entitySet string, properties []property, filterConditions []filterCondition, urlSpaceEncoding string) (*url.URL, error) {

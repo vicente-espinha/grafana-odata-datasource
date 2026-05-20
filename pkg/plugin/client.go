@@ -117,29 +117,24 @@ func (client *ODataClientImpl) doPostRequest(urlToPost string) (*http.Response, 
 }
 
 func processURL(encodedURL string) (string, string) {
+    // ✅ FIRST: normalize HTML encoding
+    encodedURL = strings.ReplaceAll(encodedURL, "&amp;", "&")
+
     parts := strings.SplitN(encodedURL, "?", 2)
-    baseUrl := parts[0]
+
+    baseURL := parts[0]
     queryString := ""
+
     if len(parts) > 1 {
         queryString = parts[1]
     }
 
-    // decodedQuery, err := url.QueryUnescape(queryString)
-    // if err != nil {
-    //     fmt.Println("Error decoding query string:", err)
-    //     return "", ""
-    // }
-	
-    // ✅ Fix HTML encoding
+    // ✅ ALSO normalize inside query (double safety)
     queryString = strings.ReplaceAll(queryString, "&amp;", "&")
 
-    // ✅ Critical fix for $query: protect '&' inside values
-    queryString = strings.ReplaceAll(queryString, "%26", "%2526")
+    queryURL := fmt.Sprintf("%s?$query", baseURL)
 
-    url := fmt.Sprintf("%s?$query", baseUrl)
-    body := queryString
-
-    return url, body
+    return queryURL, queryString
 }
 
 func buildQueryUrl(baseUrl string, entitySet string, properties []property, filterConditions []filterCondition, urlSpaceEncoding string) (*url.URL, error) {

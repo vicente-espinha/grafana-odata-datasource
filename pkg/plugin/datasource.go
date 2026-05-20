@@ -83,14 +83,16 @@ func (ds *ODataSource) QueryData(ctx context.Context, req *backend.QueryDataRequ
 	rawInstance, _ := ds.im.Get(ctx, req.PluginContext)
 	dsInstance := rawInstance.(*ODataSourceInstance)
 
-	// Set cookie headers if client is ODataClientImpl
-	if clientImpl, ok := dsInstance.client.(*ODataClientImpl); ok {
-		cookieHeader, ok := req.Headers["Cookie"]
-		if !ok || cookieHeader == "" {
-			clientImpl.SetCookieHeader("")
-		} else {
-			clientImpl.SetCookieHeader(cookieHeader)
-		}
+	clientImpl, ok := dsInstance.client.(*ODataClientImpl)
+	if !ok {
+		return nil, fmt.Errorf("expected *ODataClientImpl, got something else")
+	}
+
+	cookieHeaders, ok := req.Headers["Cookie"]
+	if !ok || len(cookieHeaders) == 0 {
+		clientImpl.SetCookieHeader("")
+	} else {
+		clientImpl.SetCookieHeader(cookieHeaders)
 	}
 	
 	clientInstance := ds.getClientInstance(ctx, req.PluginContext)
@@ -131,15 +133,17 @@ func (ds *ODataSource) CallResource(ctx context.Context, req *backend.CallResour
 	rawInstance, _ := ds.im.Get(ctx, req.PluginContext)
 	dsInstance := rawInstance.(*ODataSourceInstance)
 
-	// Set cookie headers if client is ODataClientImpl
-	if clientImpl, ok := dsInstance.client.(*ODataClientImpl); ok {
-		cookieHeaders, ok := req.Headers["Cookie"]
-		if !ok || len(cookieHeaders) == 0 {
-			clientImpl.SetCookieHeader("")
-		} else {
-			combined := strings.Join(cookieHeaders, "; ")
-			clientImpl.SetCookieHeader(combined)
-		}
+	clientImpl, ok := dsInstance.client.(*ODataClientImpl)
+	if !ok {
+		return fmt.Errorf("expected *ODataClientImpl, got something else")
+	}
+
+	cookieHeaders, ok := req.Headers["Cookie"]
+	if !ok || len(cookieHeaders) == 0 {
+		clientImpl.SetCookieHeader("")
+	} else {
+		combined := strings.Join(cookieHeaders, "; ")
+		clientImpl.SetCookieHeader(combined)
 	}
 
 	switch req.Path {
@@ -171,13 +175,11 @@ func (ds *ODataSource) query(clientInstance ODataClient, query backend.DataQuery
 	resp, err := clientInstance.Get(qm.ODataQueryString, qm.EntitySet.Name, props,
 		append(qm.FilterConditions, TimeRangeToFilter(query.TimeRange, qm.TimeProperty)...), qm.UsePost)
 	if err != nil {
-		log.DefaultLogger.Error("Get() failed", "error", err, "queryString", qm.ODataQueryString, "usePost", qm.UsePost)
 		return errorResponse("odata get failed", err)
 	}
 	defer resp.Body.Close()
 
-	log.DefaultLogger.Error("Get() response", "status", resp.Status, "statusCode", resp.StatusCode, 
-		"queryString", qm.ODataQueryString, "usePost", qm.UsePost, "entitySet", qm.EntitySet.Name)
+	log.DefaultLogger.Debug("request response status", "status", resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		return errorResponse(fmt.Sprintf("get failed with status code %d", resp.StatusCode), nil)
 	}
@@ -186,8 +188,6 @@ func (ds *ODataSource) query(clientInstance ODataClient, query backend.DataQuery
 	if err != nil {
 		return errorResponse("reading response body failed", err)
 	}
-
-	log.DefaultLogger.Debug("Get() response body", "body", string(bodyBytes), "bodyLength", len(bodyBytes))
 
 	var result odata.Response
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {

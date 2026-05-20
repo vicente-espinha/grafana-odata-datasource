@@ -181,7 +181,8 @@ func (ds *ODataSource) query(clientInstance ODataClient, query backend.DataQuery
 
 	log.DefaultLogger.Debug("request response status", "status", resp.Status)
 	if resp.StatusCode != http.StatusOK {
-		return errorResponse(fmt.Sprintf("get failed with status code %d", resp.StatusCode), nil)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return errorResponse(fmt.Sprintf("get failed with status code %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes))), nil)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)

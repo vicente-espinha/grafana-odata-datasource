@@ -56,20 +56,15 @@ func (client *ODataClientImpl) Get(oDataQueryString string, entitySet string, pr
 		}
 
 		parsedBaseUrl.Path = path.Join(parsedBaseUrl.Path, parsedQuery.Path)
-		params, _ := url.ParseQuery(parsedBaseUrl.RawQuery)
 
-		queryParams, _ := url.ParseQuery(parsedQuery.RawQuery)
-		for key, values := range queryParams {
-			for _, value := range values {
-				params.Add(key, value)
-			}
+		// Preserve RawQuery directly instead of going through url.ParseQuery + Encode,
+		// because ParseQuery splits on '&' which can legitimately appear inside OData
+		// string literals (e.g. Material_Name in ('Clone&1',...)).
+		if parsedBaseUrl.RawQuery != "" && parsedQuery.RawQuery != "" {
+			parsedBaseUrl.RawQuery = parsedBaseUrl.RawQuery + "&" + parsedQuery.RawQuery
+		} else {
+			parsedBaseUrl.RawQuery = parsedQuery.RawQuery
 		}
-
-		encodedUrl := params.Encode()
-		if client.urlSpaceEncoding == "%20" {
-			encodedUrl = strings.ReplaceAll(encodedUrl, "+", "%20")
-		}
-		parsedBaseUrl.RawQuery = encodedUrl
 
 		requestUrl = parsedBaseUrl.String()
 		log.DefaultLogger.Debug("Using provided OData query string: " + requestUrl)

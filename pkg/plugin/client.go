@@ -78,14 +78,6 @@ func (client *ODataClientImpl) Get(oDataQueryString string, entitySet string, pr
 	}
 
 	if usePost {
-		// If the query contains a percent-encoded '&' (%26) or a literal '&' inside
-		// an OData string literal, the $query POST body cannot handle it: the server
-		// uses '&' as its query-option separator and does not URL-decode values.
-		// Fall back to GET, where the HTTP layer correctly decodes %26 → '&'.
-		if hasAmpersandInStringLiterals(requestUrl) {
-			log.DefaultLogger.Debug("falling back to GET: query contains '&' or '%26' inside OData string literal")
-			return client.doGetRequest(requestUrl)
-		}
 		return client.doPostRequest(requestUrl)
 	}
 
@@ -111,7 +103,10 @@ func (client *ODataClientImpl) doPostRequest(urlToPost string) (*http.Response, 
 		return nil, err
 	}
 
-	req.Header.Set("Content-Type", "text/plain")
+	// application/x-www-form-urlencoded causes the server's web framework to
+	// URL-decode all values before passing them to the OData parser, which means
+	// %26 in a value is decoded to a literal '&' (e.g. Material_Name eq 'Clone&1').
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if client.cookieHeader != "" {
 		req.Header.Set("Cookie", client.cookieHeader)
 	}
@@ -120,48 +115,65 @@ func (client *ODataClientImpl) doPostRequest(urlToPost string) (*http.Response, 
 }
 
 func processURL(encodedURL string) (string, string) {
-    parts := strings.SplitN(encodedURL, "?", 2)
-    baseUrl := parts[0]
+    urlParts := strings.SplitN(encodedURL, "?", 2)
+    baseUrl := urlParts[0]
     queryString := ""
-    if len(parts) > 1 {
-        queryString = parts[1]
+    if len(urlParts) > 1 {
+        queryString = urlParts[1]
     }
-    // Send the raw query string as the body without URL-decoding: the server uses
-    // '&' as the query-option separator and does not URL-decode values. Queries
-    // that contain '&' inside string literals are routed to GET before reaching
-    // here (see hasAmpersandInStringLiterals in Get).
+
+    // URL-decode the raw query so that %26 becomes a literal &.
+    decoded, err := url.QueryUnescape(queryString)
+    if err != nil {
+        decoded = queryString
+    }
+
+    // Split on the '&' characters that act as query-option separators (those
+    // outside OData single-quoted string literals), then re-encode each option's
+    // value with url.QueryEscape. This produces an application/x-www-form-urlencoded
+    // body where '&' inside a string value (e.g. Material_Name eq 'Clone&1') is
+    // safely encoded as %26. The server's web framework decodes the form fields
+    // before passing them to the OData parser, so the OData layer sees the correct
+    // literal '&' in the filter expression.
+    options := splitOnOuterAmpersands(decoded)
+    encoded := make([]string, 0, len(options))
+    for _, opt := range options {
+        eqIdx := strings.IndexByte(opt, '=')
+        if eqIdx < 0 {
+            encoded = append(encoded, opt)
+            continue
+        }
+        key := opt[:eqIdx]
+        value := opt[eqIdx+1:]
+        encoded = append(encoded, key+"="+url.QueryEscape(value))
+    }
+
     postURL := fmt.Sprintf("%s?$query", baseUrl)
-    return postURL, queryString
+    return postURL, strings.Join(encoded, "&")
 }
 
-// hasAmpersandInStringLiterals reports whether the query component of rawURL
-// contains a literal '&' or a percent-encoded ampersand (%26) inside an OData
-// single-quoted string literal. Such queries cannot be sent via the $query POST
-// body because the server treats '&' as a query-option separator and does not
-// URL-decode values.
-func hasAmpersandInStringLiterals(rawURL string) bool {
-    idx := strings.Index(rawURL, "?")
-    if idx < 0 {
-        return false
-    }
-    query := rawURL[idx+1:]
+// splitOnOuterAmpersands splits s on every '&' that appears outside an OData
+// single-quoted string literal, returning the resulting segments. Escaped single
+// quotes ('') inside a literal are handled correctly.
+func splitOnOuterAmpersands(s string) []string {
+    var result []string
     inString := false
-    for i := 0; i < len(query); i++ {
-        c := query[i]
+    start := 0
+    for i := 0; i < len(s); i++ {
+        c := s[i]
         switch {
         case c == '\'':
-            if inString && i+1 < len(query) && query[i+1] == '\'' {
-                i++ // skip escaped quote (OData '' inside string)
+            if inString && i+1 < len(s) && s[i+1] == '\'' {
+                i++ // escaped quote
             } else {
                 inString = !inString
             }
-        case inString && c == '&':
-            return true
-        case inString && c == '%' && i+2 < len(query) && query[i+1] == '2' && query[i+2] == '6':
-            return true // %26 = percent-encoded &
+        case c == '&' && !inString:
+            result = append(result, s[start:i])
+            start = i + 1
         }
     }
-    return false
+    return append(result, s[start:])
 }
 
 func buildQueryUrl(baseUrl string, entitySet string, properties []property, filterConditions []filterCondition, urlSpaceEncoding string) (*url.URL, error) {

@@ -45,6 +45,14 @@ func (client *ODataClientImpl) Get(oDataQueryString string, entitySet string, pr
 	var requestUrl string
 
 	if oDataQueryString != "" {
+		// Encode literal & characters inside OData single-quoted string literals
+		// as %26 before URL parsing. Grafana template variable substitution can
+		// inject values containing & (e.g. a material name like 'Clone&1') as
+		// plain text, making the & indistinguishable from a query-string
+		// parameter separator. This must happen before url.Parse so the raw
+		// query is correct from the start.
+		oDataQueryString = encodeAmpersandInLiterals(oDataQueryString)
+
 		parsedBaseUrl, err := url.Parse(client.baseUrl)
 		if err != nil {
 			return nil, err
@@ -160,6 +168,41 @@ func buildQueryUrl(baseUrl string, entitySet string, properties []property, filt
 	}
 	requestUrl.RawQuery = encodedUrl
 	return requestUrl, nil
+}
+
+// encodeAmpersandInLiterals replaces literal & characters that appear inside
+// OData single-quoted string literals with %26. This prevents them from being
+// misinterpreted as query-string parameter separators when the & was injected
+// by Grafana template variable substitution (e.g. a variable value 'Clone&1'
+// becomes %26-encoded so it stays within the surrounding in(...) clause).
+// Characters outside single quotes are left untouched, so the & separators
+// between OData system query options ($filter, $select, $orderby, ...) are
+// preserved. Escaped single quotes in OData (written as '') are handled
+// correctly and do not prematurely end the string scan.
+func encodeAmpersandInLiterals(s string) string {
+	var b strings.Builder
+	inLiteral := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '\'':
+			// An escaped single quote in OData is two consecutive apostrophes.
+			// Consume both without toggling the literal flag.
+			if inLiteral && i+1 < len(s) && s[i+1] == '\'' {
+				b.WriteByte('\'')
+				b.WriteByte('\'')
+				i++
+				continue
+			}
+			inLiteral = !inLiteral
+			b.WriteByte(c)
+		case c == '&' && inLiteral:
+			b.WriteString("%26")
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 func mapSelect(properties []property) string {

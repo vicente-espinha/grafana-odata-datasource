@@ -119,12 +119,40 @@ func processURL(encodedURL string) (string, string) {
         queryString = parts[1]
     }
 
-    // Do NOT unescape the query string: the body must be sent as a raw URL-encoded
-    // OData query so that percent-encoded characters (e.g. %26 for a literal '&'
-    // inside a string literal) are preserved. Unescaping would turn %26 into '&',
-    // which the OData server then misinterprets as a query-option separator.
+    // Encode any literal '&' inside OData single-quoted string literals to %26 so
+    // the OData server doesn't misinterpret them as query-option separators.
+    // This handles both a frontend that sends 'Clone&1' (literal) and one that
+    // already sends 'Clone%261' (pre-encoded) — %26 is not touched here.
     url := fmt.Sprintf("%s?$query", baseUrl)
-    return url, queryString
+    return url, encodeAmpersandInStringLiterals(queryString)
+}
+
+// encodeAmpersandInStringLiterals replaces literal '&' characters that appear
+// inside OData single-quoted string literals with their percent-encoded form %26.
+// Escaped single quotes ('') inside a literal are handled correctly.
+func encodeAmpersandInStringLiterals(s string) string {
+    var sb strings.Builder
+    inString := false
+    for i := 0; i < len(s); i++ {
+        c := s[i]
+        switch {
+        case c == '\'':
+            // OData escapes a single quote inside a string as ''
+            if inString && i+1 < len(s) && s[i+1] == '\'' {
+                sb.WriteByte(c)
+                sb.WriteByte(s[i+1])
+                i++
+            } else {
+                inString = !inString
+                sb.WriteByte(c)
+            }
+        case c == '&' && inString:
+            sb.WriteString("%26")
+        default:
+            sb.WriteByte(c)
+        }
+    }
+    return sb.String()
 }
 
 func buildQueryUrl(baseUrl string, entitySet string, properties []property, filterConditions []filterCondition, urlSpaceEncoding string) (*url.URL, error) {

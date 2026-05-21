@@ -154,29 +154,14 @@ func processURL(encodedURL string) (string, string) {
 }
 
 // formEncodeODataValue encodes a value for application/x-www-form-urlencoded
-// while preserving OData syntax characters. Unlike url.QueryEscape, this only
-// encodes characters that are truly problematic for form data (&, =, %, +)
-// while preserving OData-significant characters like commas, colons, slashes, etc.
+// with minimal encoding. Some OData servers don't properly decode form bodies,
+// so we only encode the '&' character which would otherwise break the form
+// field separation. All OData syntax (spaces, commas, quotes, etc.) is preserved.
 func formEncodeODataValue(s string) string {
-    var buf strings.Builder
-    buf.Grow(len(s))
-    
-    for i := 0; i < len(s); i++ {
-        c := s[i]
-        switch c {
-        case ' ':
-            // Space is encoded as + in application/x-www-form-urlencoded
-            buf.WriteByte('+')
-        case '&', '=', '%', '+':
-            // These must be percent-encoded for form data
-            buf.WriteString(fmt.Sprintf("%%%02X", c))
-        default:
-            // Preserve all other characters, including OData syntax like , : / ( ) ' etc.
-            buf.WriteByte(c)
-        }
-    }
-    
-    return buf.String()
+    // Only replace & with %26 to prevent it from being interpreted as a field separator.
+    // Leave everything else (including spaces, commas, etc.) as-is because the OData
+    // server expects the raw OData syntax in the body.
+    return strings.ReplaceAll(s, "&", "%26")
 }
 
 // splitOnOuterAmpersands splits s on every '&' that appears outside an OData

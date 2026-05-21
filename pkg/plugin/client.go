@@ -130,11 +130,12 @@ func processURL(encodedURL string) (string, string) {
 
     // Split on the '&' characters that act as query-option separators (those
     // outside OData single-quoted string literals), then re-encode each option's
-    // value with url.QueryEscape. This produces an application/x-www-form-urlencoded
+    // value with formEncodeODataValue. This produces an application/x-www-form-urlencoded
     // body where '&' inside a string value (e.g. Material_Name eq 'Clone&1') is
-    // safely encoded as %26. The server's web framework decodes the form fields
-    // before passing them to the OData parser, so the OData layer sees the correct
-    // literal '&' in the filter expression.
+    // safely encoded as %26, while preserving OData syntax characters like commas.
+    // The server's web framework decodes the form fields before passing them to
+    // the OData parser, so the OData layer sees the correct literal '&' in the
+    // filter expression and correct commas in the select list.
     options := splitOnOuterAmpersands(decoded)
     encoded := make([]string, 0, len(options))
     for _, opt := range options {
@@ -145,11 +146,37 @@ func processURL(encodedURL string) (string, string) {
         }
         key := opt[:eqIdx]
         value := opt[eqIdx+1:]
-        encoded = append(encoded, key+"="+url.QueryEscape(value))
+        encoded = append(encoded, key+"="+formEncodeODataValue(value))
     }
 
     postURL := fmt.Sprintf("%s?$query", baseUrl)
     return postURL, strings.Join(encoded, "&")
+}
+
+// formEncodeODataValue encodes a value for application/x-www-form-urlencoded
+// while preserving OData syntax characters. Unlike url.QueryEscape, this only
+// encodes characters that are truly problematic for form data (&, =, %, +)
+// while preserving OData-significant characters like commas, colons, slashes, etc.
+func formEncodeODataValue(s string) string {
+    var buf strings.Builder
+    buf.Grow(len(s))
+    
+    for i := 0; i < len(s); i++ {
+        c := s[i]
+        switch c {
+        case ' ':
+            // Space is encoded as + in application/x-www-form-urlencoded
+            buf.WriteByte('+')
+        case '&', '=', '%', '+':
+            // These must be percent-encoded for form data
+            buf.WriteString(fmt.Sprintf("%%%02X", c))
+        default:
+            // Preserve all other characters, including OData syntax like , : / ( ) ' etc.
+            buf.WriteByte(c)
+        }
+    }
+    
+    return buf.String()
 }
 
 // splitOnOuterAmpersands splits s on every '&' that appears outside an OData
